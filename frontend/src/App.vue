@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import Icon from "./components/Icon.vue";
+import { sessionView } from "./session-clock";
 import { devices as demoDevices, formatDuration, sampleApps } from "./demo";
 import samplePayload from "../../docs/examples/active-batch.json";
 
@@ -17,8 +18,13 @@ const message = ref("");
 const base = import.meta.env.BASE_URL;
 const devices = ref([]);
 const report = ref(null);
+const clock = ref(performance.now());
+const reportReceivedAt = ref(0);
+const session = computed(() =>
+  sessionView(report.value, reportReceivedAt.value, clock.value),
+);
+const stale = computed(() => !isDemo.value && session.value.stale);
 const loading = ref(false);
-const authenticated = ref(true);
 const isDemo = computed(() => mode.value === "demo");
 const sources = computed(() => (isDemo.value ? demoDevices : devices.value));
 const device = computed(() =>
@@ -57,7 +63,7 @@ const rows = computed(() =>
 const currentSession = computed(() =>
   isDemo.value
     ? current.value?.session
-    : Math.floor((current.value?.session_ms || 0) / 1000),
+    : session.value.seconds,
 );
 const currentName = computed(() => current.value?.name || "暂无前台应用");
 const observed = computed(() =>
@@ -75,6 +81,7 @@ const observed = computed(() =>
 const protocolExample = JSON.stringify(samplePayload, null, 2);
 let generation = 0;
 let timer;
+let clockTimer;
 let disposed = false;
 
 async function request(path) {
@@ -89,10 +96,8 @@ async function request(path) {
     !response.headers.get("content-type")?.includes("application/json")
   )
     throw new Error("请通过 Formicary 打开");
-  if (response.status === 401) authenticated.value = false;
   if (!response.ok)
     throw new Error(data.error?.message || `请求失败 (${response.status})`);
-  authenticated.value = true;
   return data;
 }
 async function refresh() {
@@ -110,7 +115,11 @@ async function refresh() {
       const result = await request(
         `overview?device_id=${encodeURIComponent(deviceId.value)}&period=${period.value}`,
       );
-      if (version === generation && !disposed) report.value = result;
+      if (version === generation && !disposed) {
+        reportReceivedAt.value = performance.now();
+        clock.value = reportReceivedAt.value;
+        report.value = result;
+      }
     } else report.value = null;
     if (version === generation) message.value = "";
   } catch (error) {
@@ -180,8 +189,18 @@ function exportCsv() {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+function onVisibilityChange() {
+  if (!document.hidden) {
+    clock.value = performance.now();
+    refresh();
+  }
+}
 onMounted(() => {
   refresh();
+  clockTimer = setInterval(() => {
+    clock.value = performance.now();
+  }, 1000);
+  document.addEventListener("visibilitychange", onVisibilityChange);
   timer = setInterval(() => {
     if (!document.hidden) refresh();
   }, 10000);
@@ -190,6 +209,8 @@ onUnmounted(() => {
   disposed = true;
   generation++;
   clearInterval(timer);
+  clearInterval(clockTimer);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
 });
 </script>
 
@@ -236,8 +257,7 @@ onUnmounted(() => {
     </div>
     <div v-if="message" class="notice" role="alert">
       <span>{{ message }}</span
-      ><a v-if="!authenticated && !isDemo" href="/ui">登录 Formicary ↗</a
-      ><button v-else-if="!isDemo" @click="refresh">重试</button>
+      ><button v-if="!isDemo" @click="refresh">重试</button>
     </div>
     <section class="page-heading">
       <div>
@@ -272,14 +292,14 @@ onUnmounted(() => {
       <section v-if="view === 'overview'" class="now-grid">
         <article class="current-panel">
           <div class="panel-kicker">
-            <span>{{ !isDemo && report?.stale ? "最后应用" : "当前应用" }}</span
+            <span>{{ stale ? "最后应用" : "当前应用" }}</span
             ><span class="snapshot-tag">{{
               isDemo
                 ? "示例快照"
-                : report?.stale
+                : stale
                   ? "最后观测"
                   : current
-                    ? "最近快照"
+                    ? "实时估算"
                     : "等待上报"
             }}</span>
           </div>
@@ -378,22 +398,8 @@ onUnmounted(() => {
         </div>
         <div v-if="!apps.length" class="empty-state">
           <span>[ — ]</span>
-          <h3>
-            {{
-              loading
-                ? "正在读取…"
-                : authenticated
-                  ? "等待应用记录"
-                  : "请先登录"
-            }}
-          </h3>
-          <button
-            v-if="authenticated"
-            class="text-button"
-            @click="view = 'protocol'"
-          >
-            接收规范 ↗</button
-          ><a v-else href="/ui">登录 Formicary ↗</a>
+          <h3>{{ loading ? "正在读取…" : "等待应用记录" }}</h3>
+          <button class="text-button" @click="view = 'protocol'">接收规范 ↗</button>
         </div>
         <div v-else-if="!rows.length" class="empty-state">
           <h3>没有匹配的应用</h3>
@@ -425,7 +431,7 @@ onUnmounted(() => {
               ><span class="row-time">{{ formatDuration(valueOf(app)) }}</span
               ><span class="last-seen"
                 ><span v-if="app.current" class="small-chip">{{
-                  report?.stale ? "最后观测" : "最近快照"
+                  stale ? "最后观测" : "最近快照"
                 }}</span
                 ><template v-else>{{ app.last || "—" }}</template></span
               ><Icon name="arrow" class="row-arrow" :size="19" />

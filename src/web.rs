@@ -93,15 +93,6 @@ async fn require_key(mut request: Request, next: Next) -> Response {
         Err(error) => error.into_response(),
     }
 }
-async fn require_reader(mut request: Request, next: Next) -> Response {
-    match identity(&request, false) {
-        Ok(user) => {
-            request.extensions_mut().insert(user);
-            next.run(request).await
-        }
-        Err(error) => error.into_response(),
-    }
-}
 async fn no_store(request: Request, next: Next) -> Response {
     let mut response = next.run(request).await;
     response
@@ -116,8 +107,7 @@ pub fn router(frontend: PathBuf, store: SharedStore) -> Router {
         .route_layer(middleware::from_fn(require_key));
     let read = Router::new()
         .route("/api/v1/devices", get(devices))
-        .route("/api/v1/overview", get(overview))
-        .route_layer(middleware::from_fn(require_reader));
+        .route("/api/v1/overview", get(overview));
     let api=Router::new().route("/api/status",get(||async{Json(serde_json::json!({"mode":"receiver","ingestion_enabled":true,"authentication":"formicary","protocol_version":1}))}))
         .merge(write).merge(read).route("/api",any(not_found)).route("/api/{*path}",any(not_found)).layer(middleware::from_fn(no_store));
     Router::new()
@@ -152,12 +142,9 @@ async fn ingest(
     })
     .await
 }
-async fn devices(
-    State(store): State<SharedStore>,
-    Extension(user): Extension<Identity>,
-) -> Result<Json<serde_json::Value>> {
+async fn devices(State(store): State<SharedStore>) -> Result<Json<serde_json::Value>> {
     blocking(store, move |store| {
-        Ok(serde_json::json!({"devices":store.devices(&user.owner,Utc::now())?}))
+        Ok(serde_json::json!({"devices":store.public_devices(Utc::now())?}))
     })
     .await
 }
@@ -171,12 +158,10 @@ struct OverviewQuery {
 }
 async fn overview(
     State(store): State<SharedStore>,
-    Extension(user): Extension<Identity>,
     Query(query): Query<OverviewQuery>,
 ) -> Result<Json<crate::storage::Overview>> {
     blocking(store, move |store| {
-        store.overview(
-            &user.owner,
+        store.public_overview(
             &query.device_id.to_string(),
             query.period.as_deref().unwrap_or("today"),
             query.date.as_deref(),
@@ -260,7 +245,7 @@ mod tests {
                 .await
                 .unwrap()
                 .status(),
-            StatusCode::UNAUTHORIZED
+            StatusCode::OK
         );
         assert_eq!(
             app.oneshot(request("/api/v1/devices", Some("session"), None))
@@ -268,6 +253,47 @@ mod tests {
                 .unwrap()
                 .status(),
             StatusCode::OK
+        );
+    }
+    #[tokio::test]
+    async fn public_reads_need_no_cookie_or_identity_after_authenticated_upload() {
+        let app = app();
+        let mut batch: Batch =
+            serde_json::from_str(include_str!("../docs/examples/active-batch.json")).unwrap();
+        // Use the fixture's time as the store clock so the example stays deterministic.
+        let now = chrono::DateTime::parse_from_rfc3339(&batch.sent_at)
+            .unwrap()
+            .with_timezone(&Utc);
+        batch.device.id = uuid::Uuid::new_v4();
+        let device = batch.device.id.to_string();
+        let mut store = crate::storage::Store::memory().unwrap();
+        store.ingest("alice", batch, now).unwrap();
+        let seeded = router(PathBuf::from("nonexistent"), Arc::new(Mutex::new(store)));
+        for path in [
+            "/api/v1/devices".to_owned(),
+            format!("/api/v1/overview?device_id={device}&date=2026-10-25"),
+        ] {
+            let response = seeded
+                .clone()
+                .oneshot(request(&path, None, None))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            let bytes = to_bytes(response.into_body(), 16384).await.unwrap();
+            let data: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            if path.contains("overview") {
+                assert_eq!(data["total_ms"], 15000);
+            } else {
+                assert_eq!(data["devices"][0]["id"], device);
+            }
+        }
+        assert_eq!(
+            app.oneshot(request("/api/v1/batches", None, Some("{}".into())))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
         );
     }
     #[tokio::test]

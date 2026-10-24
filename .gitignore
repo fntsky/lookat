@@ -3,3 +3,6 @@
 /tmp/
 /frontend/node_modules/
 /frontend/public/protocol/
+
+/dist/*
+!/dist/lookat-server

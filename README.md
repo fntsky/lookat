@@ -8,9 +8,9 @@ Rust + Vue 的应用使用记录接收端。纸色与橄榄绿搭配粗边框、
 用户电脑的采集端 → Formicary 密钥鉴权 → Lookat SQLite → 网页
 ```
 
-Chamber 不采集服务器的前台应用。已接入 Formicary API Key：上报仅接受 api_key 身份，网页查询接受登录会话或密钥。密钥验证与撤销由 Formicary 完成，Lookat 不签发或缓存密钥。真实数据默认展示；“查看示例”切换到明确标识的静态设计样例，不写数据库。
+Chamber 不采集服务器的前台应用。已接入 Formicary API Key：上报仅接受 api_key 身份，网页查询公开，无需登录或密钥。密钥验证与撤销由 Formicary 完成，Lookat 不签发或缓存密钥。真实数据默认展示；“查看示例”切换到明确标识的静态设计样例，不写数据库。
 
-前台应用卡片显示最新快照，本次时长不与区间重复相加；统计按设备时区划分今日或近 7 天。设备离线或快照陈旧时显示最后观测，不在网页上继续增加时长。
+前台应用卡片按有效快照逐秒更新本次使用时长，本次时长不与区间重复相加；统计按设备时区划分今日或近 7 天。设备离线或快照陈旧时显示最后观测，不在网页上继续增加时长。
 
 ## 构建与挂载
 
@@ -26,7 +26,7 @@ make build
 http://127.0.0.1:53212/lookat/
 ```
 
-网页未登录时可前往 `/ui` 使用 Formicary 登录。密钥在 Formicary 的“API 密钥”页面创建。内部 upstream 必须只允许可信本机代理访问，不应暴露到公网；客户端伪造身份头会由 Formicary 剥离。
+网页和查询接口无需登录。采集端上报使用的密钥在 Formicary 的“API 密钥”页面创建。内部 upstream 必须只允许可信本机代理访问，不应暴露到公网；客户端伪造身份头会由 Formicary 剥离。
 
 | 变量 | 默认值 |
 | --- | --- |
@@ -72,7 +72,7 @@ python3 tests/formicary_smoke.py
 
 测试在 Formicary 的 tmp 下创建独立鉴权库与 Chamber，使用临时管理员签发和撤销测试密钥，验证真实代理链路，不修改既有账号或数据库；退出会清理该测试目录与进程。`--browser` 可保留该隔离环境用于人工 UI 验证，输入换行退出。
 
-前端开发：`npm run dev --prefix frontend`，默认 `http://127.0.0.1:5174/lookat/`。真实数据由开发代理转发给本机 Formicary 的 53212 端口，需要该地址的有效登录 Cookie；也可以切换示例模式。构建 base 为 `/lookat/`，更改挂载路径需同步 `frontend/vite.config.js` 并重建。
+前端开发：`npm run dev --prefix frontend`，默认 `http://127.0.0.1:5174/lookat/`。真实数据由开发代理转发给本机 Formicary 的 53212 端口，无需登录 Cookie；也可以切换示例模式。构建 base 为 `/lookat/`，更改挂载路径需同步 `frontend/vite.config.js` 并重建。
 
 `make copy-to-chamber` 将源码与产物复制到 `../formicary/tmp/chamber/lookat`，用于本地开发运行，保留该副本的 data/，不会启动 Formicary。
 

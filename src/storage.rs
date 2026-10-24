@@ -54,6 +54,7 @@ pub struct CurrentApp {
 }
 #[derive(Debug, Serialize)]
 pub struct Overview {
+    pub server_now: String,
     pub date: String,
     pub period: String,
     pub timezone: String,
@@ -185,7 +186,17 @@ impl Store {
         })
     }
     pub fn devices(&self, owner: &str, now: DateTime<Utc>) -> Result<Vec<DeviceSummary>> {
-        let mut statement=self.db.prepare("SELECT id,name,platform,timezone,last_received_ms FROM devices WHERE owner=?1 ORDER BY last_received_ms DESC,id")?;
+        self.device_summaries(Some(owner), now)
+    }
+    pub fn public_devices(&self, now: DateTime<Utc>) -> Result<Vec<DeviceSummary>> {
+        self.device_summaries(None, now)
+    }
+    fn device_summaries(
+        &self,
+        owner: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<DeviceSummary>> {
+        let mut statement=self.db.prepare("SELECT id,name,platform,timezone,last_received_ms FROM devices WHERE (?1 IS NULL OR owner=?1) AND (?1 IS NOT NULL OR id IN (SELECT id FROM devices GROUP BY id HAVING COUNT(*)=1)) ORDER BY last_received_ms DESC,id")?;
         Ok(statement
             .query_map([owner], |r| {
                 let last: i64 = r.get(4)?;
@@ -199,6 +210,32 @@ impl Store {
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+    pub fn public_overview(
+        &self,
+        device_id: &str,
+        period: &str,
+        date: Option<&str>,
+        timezone: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<Overview> {
+        let mut statement = self
+            .db
+            .prepare("SELECT owner FROM devices WHERE id=?1 LIMIT 2")?;
+        let owners = statement
+            .query_map([device_id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        match owners.as_slice() {
+            [owner] => self.overview(owner, device_id, period, date, timezone, now),
+            [] => Err(Problem::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "设备不存在",
+            )),
+            _ => Err(Problem::conflict(
+                "设备标识在多个账户中重复，请为采集端配置独立的设备标识",
+            )),
+        }
     }
     pub fn overview(
         &self,
@@ -314,6 +351,7 @@ impl Store {
             .unwrap_or("no_window")
             .to_owned();
         Ok(Overview {
+            server_now: iso(now.timestamp_millis()),
             date: date.to_string(),
             period: period.to_owned(),
             timezone: tz.name().to_owned(),
@@ -345,6 +383,35 @@ mod tests {
         result
     }
     #[test]
+    fn public_reads_include_devices_but_never_merge_colliding_owner_records() {
+        let mut store = Store::memory().unwrap();
+        let (batch, now) = fixture();
+        let device = batch.device.id.to_string();
+        store.ingest("alice", batch.clone(), now).unwrap();
+        assert_eq!(store.public_devices(now).unwrap().len(), 1);
+        assert_eq!(
+            store
+                .public_overview(&device, "today", None, None, now)
+                .unwrap()
+                .total_ms,
+            15000
+        );
+        let mut other = batch.clone();
+        other.device.id = uuid::Uuid::new_v4();
+        store.ingest("bob", other, now).unwrap();
+        assert_eq!(store.public_devices(now).unwrap().len(), 2);
+        store.ingest("bob", batch, now).unwrap();
+        assert_eq!(store.public_devices(now).unwrap().len(), 1);
+        assert_eq!(
+            store
+                .public_overview(&device, "today", None, None, now)
+                .unwrap_err()
+                .status,
+            StatusCode::CONFLICT
+        );
+    }
+
+    #[test]
     fn accepts_persists_deduplicates_and_isolates_owners() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("lookat.sqlite3");
@@ -370,6 +437,7 @@ mod tests {
             let overview = store
                 .overview("alice", &device, "today", None, None, now)
                 .unwrap();
+            assert_eq!(overview.server_now, iso(now.timestamp_millis()));
             assert_eq!(overview.total_ms, 15000);
             assert_eq!(overview.current.unwrap().session_ms, 872000);
             assert!(store.devices("bob", now).unwrap().is_empty());

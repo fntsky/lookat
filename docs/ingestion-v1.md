@@ -8,13 +8,13 @@
 用户电脑的采集端 → Formicary 密钥鉴权 → Lookat 校验 / 幂等入库 → 网页
 ```
 
-上报通过 `Authorization: Bearer <Formicary API Key>` 或 `X-API-Key` 携带密钥。Formicary 验证并剥离密钥，转发 `X-Formicary-Auth: api_key`、`X-Formicary-User`、`X-Formicary-Principal: api-key:<key-id>` 和 `X-Formicary-Key-Id`。Chamber 检查完整身份上下文，缺少有效身份返回 401；仅浏览器 session 上报返回 403。读取接口接受 Formicary session 或 api_key。
+上报通过 `Authorization: Bearer <Formicary API Key>` 或 `X-API-Key` 携带密钥。Formicary 验证并剥离密钥，转发 `X-Formicary-Auth: api_key`、`X-Formicary-User`、`X-Formicary-Principal: api-key:<key-id>` 和 `X-Formicary-Key-Id`。Chamber 检查完整身份上下文，缺少有效身份返回 401；仅浏览器 session 上报返回 403。读取接口公开，无需 Formicary session 或 api_key。
 
 不自行签发、缓存或验证密钥，不接受正文中的 user_id 或 token。Formicary 会剥离客户端伪造的 `X-Formicary-*`。**内部 upstream 仅监听 127.0.0.1，必须仅允许可信本机代理访问**；不应将其内部端口映射到公网，因为绕过代理的本机调用者可伪造身份头。外部请求必须经 Formicary。
 
 当前 Formicary 密钥没有细分作用域或设备绑定。Lookat 以已验证的用户名隔离数据，首次合法上报即登记该用户下的设备；同一用户的其他有效密钥可继续上报该设备，轮换密钥不会重复生成统计。同名设备 UUID 在不同用户名下互不共享。设备 UUID 不是授权凭据。当前上游只提供用户名，账户改名后历史记录仍保留在原用户名下，需显式迁移，不会自动转移。
 
-采集端负责自动识别所有前台应用、前台计时和离线队列；Chamber 接受合法的应用数据，不收集窗口标题。浏览器从受保护 API 读取数据，不把页面停留当作使用时间。内置示例模式不写数据库。
+采集端负责自动识别所有前台应用、前台计时和离线队列；Chamber 接受合法的应用数据，不收集窗口标题。浏览器从公开 API 读取数据，不把页面停留当作使用时间。内置示例模式不写数据库。
 
 ## 2. 传输约定
 
@@ -109,21 +109,21 @@ JSON Schema 只验证结构，接收端同时执行以下语义校验：
 
 ## 8. 查询接口
 
-通过 Formicary 登录会话或密钥访问，所有结果按该请求的已验证用户名过滤：
+以下读取接口公开，无需登录、Cookie 或 API 密钥；展示已接受的设备与使用记录，不返回上报账户或密钥身份字段：
 
 - `GET /lookat/api/v1/devices` → `{"devices":[{"id":"…","name":"…","platform":"linux","timezone":"Asia/Shanghai","last_received_at":"…","online":true}]}`。
-- `GET /lookat/api/v1/overview?device_id=<UUID>&period=today|week`。可附 `date=YYYY-MM-DD` 与有效 IANA `timezone`；默认使用设备时区的今天，week 是截至选定日期的连续 7 天。返回 date、period、timezone、total_ms（选定范围）、today_ms（当前本地日）、apps、current、observed_at、stale、state。
+- `GET /lookat/api/v1/overview?device_id=<UUID>&period=today|week`。可附 `date=YYYY-MM-DD` 与有效 IANA `timezone`；默认使用设备时区的今天，week 是截至选定日期的连续 7 天。返回 server_now（服务端本次查询时间，用于页面计时）、date、period、timezone、total_ms（选定范围）、today_ms（当前本地日）、apps、current、observed_at、stale、state。
 - 每个 apps 项包含 id、name、process、usage_ms（选定范围）、total_ms（全历史）、last（报表时区 HH:MM）与 current。历史应用保留在列表中，选定范围无使用时 usage_ms 为 0。
-- current 为最近 active 快照的 `{id,name,process,session_ms}` 或 null。stale=true 时仅作最后观测展示，不表示当前仍在使用；网页不在两次上报之间擅自递增时长。
-- 未授权的设备 UUID 返回 404，不透露其他用户是否拥有该设备；未知 API 返回 404。
+- current 为最近 active 快照的 `{id,name,process,session_ms}` 或 null。stale=true 时仅作最后观测展示，不表示当前仍在使用；网页仅对有效 active 快照的“本次使用”显示逐秒估算，按服务端当前时间与 observed_at 的间隔推算；新快照到达时校准，快照过期或非 active 时停止。累计统计不参与估算。
+- 不存在的设备 UUID 返回 404；未知 API 返回 404。不同上报账户若复用了相同设备 UUID，不合并数据，该 UUID 不列入公开设备列表，查询返回 409；应为不同采集安装保留独立设备标识。
 
-`GET /lookat/api/status` 是不含用户信息的接收端状态，`GET /lookat/healthz` 为健康检查。静态页面、协议文件和内置示例可公开访问，真实设备与统计数据必须经过鉴权。API 响应设置 Cache-Control: no-store。
+`GET /lookat/api/status` 是不含用户信息的接收端状态，`GET /lookat/healthz` 为健康检查。静态页面、协议文件和内置示例可公开访问，设备列表与统计数据也公开可读，只有上报需要密钥鉴权。API 响应设置 Cache-Control: no-store。
 
 ## 9. 存储和实现范围
 
 SQLite 默认为 `data/lookat.sqlite3`，独立于 Formicary 鉴权库。按版本迁移；批次、区间和设备快照在同一事务写入，正常重启后恢复，未引入自动清理。设备/批次/区间均按已验证用户名隔离，区间幂等记录随原记录保留。
 
-已实现：Formicary 代理身份接入、结构与时间语义校验、幂等事务、重叠冲突回滚、UTC 区间汇总、跨天和夏令时处理、快照陈旧判定、受保护的设备/使用查询、移动端网页。
+已实现：Formicary 代理身份接入、结构与时间语义校验、幂等事务、重叠冲突回滚、UTC 区间汇总、跨天和夏令时处理、快照陈旧判定、公开的设备/使用查询、移动端网页。
 
 本机采集端在独立分支 `feat/kwin-foreground-process`：`lookat collect <config.json>` 默认统计所有前台应用，支持 Formicary API key 上报、持久离线队列与重试。配置示例及限制见该分支 README。接收端分支本身不运行桌面采集。
 

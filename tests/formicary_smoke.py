@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix='lookat-e2e-', dir=FORMICARY / 'tmp') as
                     request('/lookat/healthz'); break
                 except (AssertionError,urllib.error.URLError): time.sleep(.1)
             else: raise AssertionError('Lookat upstream 启动超时')
-            request('/lookat/api/v1/devices',expected=401)
+            request('/lookat/api/v1/devices')
             request('/lookat/api/v1/batches','POST',{},session=True,expected=403)
             spoof={'X-Formicary-Auth':'api_key','X-Formicary-User':'admin',
                    'X-Formicary-Principal':'api-key:0123456789abcdef01234567','X-Formicary-Key-Id':'0123456789abcdef01234567'}
@@ -99,24 +99,14 @@ with tempfile.TemporaryDirectory(prefix='lookat-e2e-', dir=FORMICARY / 'tmp') as
             duplicate,_=request('/lookat/api/v1/batches','POST',batch,headers={'X-API-Key':token})
             assert duplicate['status']=='duplicate'
             query='/lookat/api/v1/overview?device_id='+batch['device']['id']
-            view,_=request(query,session=True)
+            view,_=request(query)
             assert view['total_ms']==15000 and view['current']['name']=='Visual Studio Code'
             request('/api/keys/'+str(key_id),'DELETE',session=True)
             request('/lookat/api/v1/batches','POST',batch,headers=authorized,expected=401)
-            print('Formicary 全链路通过：会话查询、密钥上报、伪造头拒绝、无效/撤销密钥拒绝、重复去重。',flush=True)
+            print('Formicary 全链路通过：公开查询、密钥上报、伪造头拒绝、无效/撤销密钥拒绝、重复去重。',flush=True)
             if args.browser:
-                class Bootstrap(http.server.BaseHTTPRequestHandler):
-                    def do_GET(self):
-                        self.send_response(302)
-                        self.send_header('Set-Cookie',cookie+'; Path=/; HttpOnly; SameSite=Lax')
-                        self.send_header('Location',base+'/lookat/')
-                        self.end_headers()
-                    def log_message(self,*values): pass
-                with http.server.HTTPServer(('127.0.0.1',0),Bootstrap) as bootstrap:
-                    bootstrap.timeout=180
-                    print('浏览器验证入口：http://127.0.0.1:'+str(bootstrap.server_port),flush=True)
-                    bootstrap.handle_request()
-                print('浏览器验证中；输入换行结束隔离测试环境。',flush=True)
+                print('浏览器验证入口：'+base+'/lookat/',flush=True)
+                print('公开浏览验证中；输入换行结束隔离测试环境。',flush=True)
                 input()
         finally:
             if process.poll() is None:

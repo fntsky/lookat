@@ -45,15 +45,15 @@ with tempfile.TemporaryDirectory(prefix='lookat-receiver-') as temporary:
     try:
         assert b'<div id="app">' in request('/')
         assert request('/healthz')==b'ok'
-        request('/api/v1/devices',expected=401)
+        assert request('/api/v1/devices')['devices']==[]
         request('/api/v1/batches','POST',{},auth='session',expected=403)
         batch=packet()
         result=request('/api/v1/batches','POST',batch,auth='api_key');assert result['accepted_intervals']==1
         assert request('/api/v1/batches','POST',batch,auth='api_key')['status']=='duplicate'
         query='/api/v1/overview?device_id='+batch['device']['id']
-        assert request(query,auth='session')['total_ms']==15000
+        assert request(query)['total_ms']==15000
         process.terminate();process.wait(timeout=10);process,base=start()
-        assert request(query,auth='session')['total_ms']==15000
+        assert request(query)['total_ms']==15000
         for name in ['ingestion-v1.md','ingestion-v1.schema.json','active-batch.json','locked-heartbeat.json']:
             request('/protocol/'+name)
         print('接收端 HTTP 检查通过：鉴权边界、幂等、查询、重启恢复、协议下载，无桌面依赖。')
