@@ -14,7 +14,7 @@
 
 当前 Formicary 密钥没有细分作用域或设备绑定。Lookat 以已验证的用户名隔离数据，首次合法上报即登记该用户下的设备；同一用户的其他有效密钥可继续上报该设备，轮换密钥不会重复生成统计。同名设备 UUID 在不同用户名下互不共享。设备 UUID 不是授权凭据。当前上游只提供用户名，账户改名后历史记录仍保留在原用户名下，需显式迁移，不会自动转移。
 
-采集端负责名单匹配、前台计时和离线队列；Chamber 不修改客户端名单、不收集窗口标题。浏览器从受保护 API 读取数据，不把页面停留当作使用时间。内置示例模式不写数据库。
+采集端负责自动识别所有前台应用、前台计时和离线队列；Chamber 接受合法的应用数据，不收集窗口标题。浏览器从受保护 API 读取数据，不把页面停留当作使用时间。内置示例模式不写数据库。
 
 ## 2. 传输约定
 
@@ -45,12 +45,12 @@
 
 `application` 包含 `id`（稳定应用 id，1–128 字符）、`name`（1–80 字符）、`process_name`（1–260 字符）；可选 `executable`（完整可执行路径，最多 4096 字符，建议默认省略）。应用 id 由采集端稳定映射，不使用 PID 作为 id；例如 `com.visualstudio.code`。v1 按 `(身份, device.id, application.id)` 分组，不自动把不同设备上的同名应用合并。
 
-`interval` 包含稳定 UUID `id`、`application`、`started_at`、`ended_at`、`duration_ms`。区间使用半开区间 `[started_at, ended_at)`，相邻区间可以共用边界；`duration_ms` 范围 1–60000。仅记录名单中应用的有效前台时间，后台运行、暂停、锁屏和采集失败都不计入。空闲检测若采集端支持，应在进入 idle 时结束有效区间；不支持时不能伪称已过滤键鼠空闲。
+`interval` 包含稳定 UUID `id`、`application`、`started_at`、`ended_at`、`duration_ms`。区间使用半开区间 `[started_at, ended_at)`，相邻区间可以共用边界；`duration_ms` 范围 1–60000。记录所有应用的有效前台时间，后台运行、暂停、锁屏和采集失败都不计入。空闲检测若采集端支持，应在进入 idle 时结束有效区间；不支持时不能伪称已过滤键鼠空闲。
 
 `snapshot` 有两类：
 
-- `state: active`：需要 `application`、`observed_at`、`since`、`session_ms`，可选 `pid`。表示名单中应用在前台的一次观测，session_ms 是本次连续有效使用时长，不是新增累计量。
-- `state: idle | locked | paused | no_window`：只有 `state` 和 `observed_at`，不能夹带前一个应用或时长。`no_window` 同时表示无有效窗口、未匹配统计名单或无法获得可靠前台状态。
+- `state: active`：需要 `application`、`observed_at`、`since`、`session_ms`，可选 `pid`。表示应用在前台的一次观测，session_ms 是本次连续有效使用时长，不是新增累计量。
+- `state: idle | locked | paused | no_window`：只有 `state` 和 `observed_at`，不能夹带前一个应用或时长。`no_window` 同时表示无有效窗口或无法获得可靠前台状态。
 
 名称和可执行路径拒绝空白值及控制字符。本协议不上传窗口标题、网页 URL、文档名、命令行参数或按键内容。可执行路径属于可选信息；接收方不能把该路径用于打开服务器文件或执行命令。
 
@@ -113,7 +113,7 @@ JSON Schema 只验证结构，接收端同时执行以下语义校验：
 
 - `GET /lookat/api/v1/devices` → `{"devices":[{"id":"…","name":"…","platform":"linux","timezone":"Asia/Shanghai","last_received_at":"…","online":true}]}`。
 - `GET /lookat/api/v1/overview?device_id=<UUID>&period=today|week`。可附 `date=YYYY-MM-DD` 与有效 IANA `timezone`；默认使用设备时区的今天，week 是截至选定日期的连续 7 天。返回 date、period、timezone、total_ms（选定范围）、today_ms（当前本地日）、apps、current、observed_at、stale、state。
-- 每个 apps 项包含 id、name、process、usage_ms（选定范围）、total_ms（全历史）、last（报表时区 HH:MM）与 current。历史应用保留在名单中，选定范围无使用时 usage_ms 为 0。
+- 每个 apps 项包含 id、name、process、usage_ms（选定范围）、total_ms（全历史）、last（报表时区 HH:MM）与 current。历史应用保留在列表中，选定范围无使用时 usage_ms 为 0。
 - current 为最近 active 快照的 `{id,name,process,session_ms}` 或 null。stale=true 时仅作最后观测展示，不表示当前仍在使用；网页不在两次上报之间擅自递增时长。
 - 未授权的设备 UUID 返回 404，不透露其他用户是否拥有该设备；未知 API 返回 404。
 
@@ -125,6 +125,6 @@ SQLite 默认为 `data/lookat.sqlite3`，独立于 Formicary 鉴权库。按版�
 
 已实现：Formicary 代理身份接入、结构与时间语义校验、幂等事务、重叠冲突回滚、UTC 区间汇总、跨天和夏令时处理、快照陈旧判定、受保护的设备/使用查询、移动端网页。
 
-本机采集端在独立分支 `feat/kwin-foreground-process`：`lookat collect <config.json>` 支持应用白名单、Formicary API key 上报、持久离线队列与重试。配置示例及限制见该分支 README。接收端分支本身不运行桌面采集。
+本机采集端在独立分支 `feat/kwin-foreground-process`：`lookat collect <config.json>` 默认统计所有前台应用，支持 Formicary API key 上报、持久离线队列与重试。配置示例及限制见该分支 README。接收端分支本身不运行桌面采集。
 
-尚未实现：客户端名单远程配置、数据删除与保留策略、独立设备授权。
+尚未实现：数据删除与保留策略、独立设备授权。

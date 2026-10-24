@@ -83,7 +83,7 @@ cargo run
 cargo run -- --watch
 ```
 
-本分支附带的原 CLI 仅输出本机前台窗口信息，支持 Windows、Linux X11（xprop）和 KDE Plasma 6 Wayland（直接调用 KWin）。需要上报时使用独立的采集分支。远程名单配置和数据清理策略尚未实现。
+本分支附带的原 CLI 仅输出本机前台窗口信息，支持 Windows、Linux X11（xprop）和 KDE Plasma 6 Wayland（直接调用 KWin）。需要上报时使用独立的采集分支。采集端默认统计所有前台应用，无需白名单。数据清理策略尚未实现。
 
 本分支随仓库提交 `dist/lookat-server` 和 `frontend/dist/`，从 GitHub 安装为 Chamber 后可直接启动，无需现场编译。
 当前预编译服务面向 Linux x86_64，仍需兼容的系统运行库；其他平台请自行构建。
