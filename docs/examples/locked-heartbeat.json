@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "batch_id": "8a88bf1a-bb41-44bf-8917-cc6acc266005",
+  "stream_id": "0c87bf1a-ff41-44bf-8917-cc6acc266002",
+  "sequence": 13,
+  "device": {
+    "id": "8a88bf1a-bb41-44bf-8917-cc6acc266003",
+    "name": "Studio Linux",
+    "platform": "linux",
+    "timezone": "Asia/Shanghai"
+  },
+  "agent": { "name": "lookat", "version": "0.1.0" },
+  "sent_at": "2026-10-25T09:06:39.000Z",
+  "intervals": [],
+  "snapshot": { "state": "locked", "observed_at": "2026-10-25T09:06:39.000Z" }
+}

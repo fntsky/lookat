@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "batch_id": "8a88bf1a-bb41-44bf-8917-cc6acc266001",
+  "stream_id": "0c87bf1a-ff41-44bf-8917-cc6acc266002",
+  "sequence": 12,
+  "device": {
+    "id": "8a88bf1a-bb41-44bf-8917-cc6acc266003",
+    "name": "Studio Linux",
+    "platform": "linux",
+    "timezone": "Asia/Shanghai"
+  },
+  "agent": { "name": "lookat", "version": "0.1.0" },
+  "sent_at": "2026-10-25T09:06:24.000Z",
+  "intervals": [
+    {
+      "id": "8a88bf1a-bb41-44bf-8917-cc6acc266004",
+      "application": {
+        "id": "com.visualstudio.code",
+        "name": "Visual Studio Code",
+        "process_name": "code"
+      },
+      "started_at": "2026-10-25T09:06:09.000Z",
+      "ended_at": "2026-10-25T09:06:24.000Z",
+      "duration_ms": 15000
+    }
+  ],
+  "snapshot": {
+    "state": "active",
+    "observed_at": "2026-10-25T09:06:24.000Z",
+    "application": {
+      "id": "com.visualstudio.code",
+      "name": "Visual Studio Code",
+      "process_name": "code"
+    },
+    "since": "2026-10-25T08:51:52.000Z",
+    "session_ms": 872000,
+    "pid": 18426
+  }
+}

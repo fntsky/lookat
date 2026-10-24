@@ -1,0 +1,9 @@
+[chamber]
+name = "lookat"
+schema_version = 1
+
+[proxyhttp]
+working_directory = "."
+script = "./start.sh"
+upstream = "http://127.0.0.1:53214"
+route = "/lookat"
