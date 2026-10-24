@@ -85,8 +85,8 @@ cargo run -- --watch
 
 本分支附带的原 CLI 仅输出本机前台窗口信息，支持 Windows、Linux X11（xprop）和 KDE Plasma 6 Wayland（直接调用 KWin）。需要上报时使用独立的采集分支。远程名单配置和数据清理策略尚未实现。
 
-从 GitHub 安装本分支为 Chamber 时，首次启动若缺少服务或前端产物，`start.sh` 会自动运行 `make build`。
-服务器需要 Rust 工具链、Node.js/npm、make 及依赖下载网络；首次编译需要等待，之后启动复用产物。
-也可提前运行 `make build`，或使用 `make copy-to-chamber` 安装含产物的目录。
+本分支随仓库提交 `dist/lookat-server` 和 `frontend/dist/`，从 GitHub 安装为 Chamber 后可直接启动，无需现场编译。
+当前预编译服务面向 Linux x86_64，仍需兼容的系统运行库；其他平台请自行构建。
+修改源码后运行 `make build`，将更新后的服务与前端产物一起提交。缺少产物时 `start.sh` 仍会尝试自动构建，此时需要 Rust、Node.js/npm、make 和依赖下载网络。
 本机采集 CLI 在 `feat/kwin-foreground-process` 分支，使用 `lookat collect <config.json>` 上报；
 API 密钥仅配置在采集电脑，不写入 Chamber 仓库。

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lookat:ingestion:v1",
+  "title": "Lookat usage batch v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "batch_id",
+    "stream_id",
+    "sequence",
+    "device",
+    "agent",
+    "sent_at",
+    "intervals",
+    "snapshot"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "batch_id": { "$ref": "#/$defs/uuid" },
+    "stream_id": { "$ref": "#/$defs/uuid" },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "platform", "timezone"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "platform": { "enum": ["linux", "windows", "macos"] },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "IANA time zone; existence must be validated by the future receiver."
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "lookat" },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$",
+          "maxLength": 64
+        }
+      }
+    },
+    "sent_at": { "$ref": "#/$defs/timestamp" },
+    "intervals": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/interval" }
+    },
+    "snapshot": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "observed_at",
+            "application",
+            "since",
+            "session_ms"
+          ],
+          "properties": {
+            "state": { "const": "active" },
+            "observed_at": { "$ref": "#/$defs/timestamp" },
+            "application": { "$ref": "#/$defs/application" },
+            "since": { "$ref": "#/$defs/timestamp" },
+            "session_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "pid": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "observed_at"],
+          "properties": {
+            "state": { "enum": ["idle", "locked", "paused", "no_window"] },
+            "observed_at": { "$ref": "#/$defs/timestamp" }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+      "description": "UTC RFC3339, millisecond precision, for example 2026-10-25T00:00:00.000Z"
+    },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "process_name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "process_name": { "type": "string", "minLength": 1, "maxLength": 260 },
+        "executable": { "type": "string", "minLength": 1, "maxLength": 4096 }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "application",
+        "started_at",
+        "ended_at",
+        "duration_ms"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "application": { "$ref": "#/$defs/application" },
+        "started_at": { "$ref": "#/$defs/timestamp" },
+        "ended_at": { "$ref": "#/$defs/timestamp" },
+        "duration_ms": { "type": "integer", "minimum": 1, "maximum": 60000 }
+      }
+    }
+  }
+}

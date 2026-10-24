@@ -1,7 +1,5 @@
 /target/
-/dist/
 /data/
 /tmp/
 /frontend/node_modules/
-/frontend/dist/
 /frontend/public/protocol/
