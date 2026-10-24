@@ -83,4 +83,10 @@ cargo run
 cargo run -- --watch
 ```
 
-原 CLI 独立输出本机前台窗口信息，支持 Windows、Linux X11（xprop）和 KDE Plasma 6 Wayland（直接调用 KWin）。它不会自动上报数据。采集端发送/离线队列、远程名单配置和数据清理策略不在本次接收端实现范围内。
+本分支附带的原 CLI 仅输出本机前台窗口信息，支持 Windows、Linux X11（xprop）和 KDE Plasma 6 Wayland（直接调用 KWin）。需要上报时使用独立的采集分支。远程名单配置和数据清理策略尚未实现。
+
+从 GitHub 安装本分支为 Chamber 时，首次启动若缺少服务或前端产物，`start.sh` 会自动运行 `make build`。
+服务器需要 Rust 工具链、Node.js/npm、make 及依赖下载网络；首次编译需要等待，之后启动复用产物。
+也可提前运行 `make build`，或使用 `make copy-to-chamber` 安装含产物的目录。
+本机采集 CLI 在 `feat/kwin-foreground-process` 分支，使用 `lookat collect <config.json>` 上报；
+API 密钥仅配置在采集电脑，不写入 Chamber 仓库。
